@@ -75,7 +75,7 @@ fi
 dev_name=${LABEL:-${PART_ENTRY_NAME:-${dev##*/}}}
 name="${dev_name}"
 count=0
-while [ -e "${mdir}/${dev_name}" ]; do name="${dev_name} $(( ++count ))"; done
+while [ -e "${mdir}/${name}" ]; do name="${dev_name} $(( ++count ))"; done
 dir="${mdir}/${name}"
 
 case $TYPE in
@@ -91,18 +91,28 @@ case $TYPE in
         ;;
 esac
 
+    rmdir "$dir"
 log "mounting device $dev in $dir"
 mkdir -p "$dir"
 if mount -t "${mtype:-auto}" -o "$mopts" "$dev" "$dir"
 then
     # Notify
-    command -v notify-send && notify-send "Media Automount" "New device mounted at $dir"
     username="$(ps au | awk '$11 ~ /^xinit/ { print $1; exit }')"
-    [[ "$username" ]] && DISPLAY=:0 runuser -u "$username" xdg-open "$dir"
+    if [[ -n "$username" ]]; then
+        export DISPLAY="$(ps e -u "$username" | grep -m1 DISPLAY | sed -rn 's/.* DISPLAY=(:[0-9]*).*/\1/p')"
+        # The process below can easily be broken
+        export XAUTHORITY="$(ps e -u "$username" | grep -m1 XAUTHORITY  | sed -rn 's/.* XAUTHORITY=([^=]*) [A-Za-z_]*=.*/\1/p')"
+        export FILE="$(ps e -u "$username" | grep -m1 FILE  | sed -rn 's/.* FILE=([^=]*) [A-Za-z_]*=.*/\1/p')"
+        command -v notify-send && runuser -u "$username" notify-send "Media Automount" "New device mounted at $dir"
+        if [[ -n "$FILE"  ]]; then
+            nohup su - "$username" -c "XAUTHORITY='${XAUTHORITY}' DISPLAY='${DISPLAY}' st $FILE '$dir'" &
+        else
+            command -v xdg-open && nohup runuser -u "$username" xdg-open "$dir" &
+        fi
+    fi
     log "Device successfully mounted: $dir"
     exit 0
 else
     log "Mount error: $?"
-    rmdir "$dir"
     exit 1
 fi
