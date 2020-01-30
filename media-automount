@@ -23,6 +23,11 @@ then
     exit 1
 else
     dev=/dev/${1##*/}
+    # Check if it's actually a device partition
+    if [[ -n "$(blkid $dev | grep PTTYPE)" ]]; then
+        log "$dev is not a device partition"
+        exit 1
+    fi
 fi
 
 # Check if the device exists, if not but mounted, umount it
