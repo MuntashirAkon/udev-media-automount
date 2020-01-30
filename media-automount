@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #$1 = <dev>
 
 # Directory to use for mounting the devices
@@ -36,8 +36,11 @@ then
     if grep /etc/mtab -qe "^$dev"
     then
         log "$dev device removed, umounting and cleaning /media"
-        if umount "$dev"
-        then
+        # Check and close processes with this mount point
+        # TODO: Handle multiple mount points
+        mount_point="$(grep "$dev" /etc/mtab | awk '{print $2}')"
+        fuser -k "${mount_point}"
+        if umount "${mount_point}"; then
             exitcode=0
         else
             log "Error umounting $dev errcode:$?"
@@ -98,6 +101,7 @@ if mount -t "${mtype:-auto}" -o "$mopts" "$dev" "$dir"
 then
     # Notify
     username="$(ps au | awk '$11 ~ /^xinit/ { print $1; exit }')"
+    ppid=$(ps -o ppid= -p  $$)
     if [[ -n "$username" ]]; then
         export DISPLAY="$(ps e -u "$username" | grep -m1 DISPLAY | sed -rn 's/.* DISPLAY=(:[0-9]*).*/\1/p')"
         # The process below can easily be broken
@@ -107,10 +111,11 @@ then
         if [[ -n "$FILE"  ]]; then
             nohup su - "$username" -c "XAUTHORITY='${XAUTHORITY}' DISPLAY='${DISPLAY}' st $FILE '$dir'" &
         else
-            command -v xdg-open && nohup runuser -u "$username" xdg-open "$dir" &
+            nohup command -v xdg-open && runuser -u "$username" xdg-open "$dir" &
         fi
     fi
     log "Device successfully mounted: $dir"
+    kill -9 $ppid
     exit 0
 else
     log "Mount error: $?"
