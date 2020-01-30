@@ -2,7 +2,7 @@
 #$1 = <dev>
 
 # Directory to use for mounting the devices
-mdir=/media/
+mdir=/media
 # Default options to use for mounting
 mopts='errors=remount-ro,relatime,utf8,user'
 
@@ -13,7 +13,8 @@ mopts='errors=remount-ro,relatime,utf8,user'
 shopt -s nullglob
 
 log() {
-    logger -st "media-automount" "$*"
+    echo "$@" >> /var/log/media-automount.log
+    >&2 echo "$@"
 }
 
 if ! [ "$1" ]
@@ -21,7 +22,7 @@ then
     log "missing arguments! a device name must be provided"
     exit 1
 else
-    dev=/dev/${1##*/}  
+    dev=/dev/${1##*/}
 fi
 
 # Check if the device exists, if not but mounted, umount it
@@ -29,23 +30,23 @@ if ! [ -b $dev ]
 then
     if grep /etc/mtab -qe "^$dev"
     then
-	log "$dev device removed, umounting and cleaning /media"
-	if umount "$dev"
-	then
-	    exitcode=0
-	else
-	    log "Error umounting $dev errcode:$?"
-	    exitcode=$?
-	fi
+        log "$dev device removed, umounting and cleaning /media"
+        if umount "$dev"
+        then
+            exitcode=0
+        else
+            log "Error umounting $dev errcode:$?"
+            exitcode=$?
+        fi
     else
-	log "device doesn't exist anymore or is not a block device: $dev"
-	exitcode=1
+        log "device doesn't exist anymore or is not a block device: $dev"
+        exitcode=1
     fi
 
     # cleanup
     for dir in "$mdir"/*
     do
-	[ -d "$dir" ] && ! mountpoint -q "$dir" && rmdir "$dir"
+        [ -d "$dir" ] && ! mountpoint -q "$dir" && rmdir "$dir"
     done
     exit $exitcode
 fi
@@ -66,19 +67,23 @@ then
 fi
 
 # directory name
-dir="${mdir}/${LABEL:-${dev##*/}}.$TYPE"
+dev_name=${LABEL:-${PART_ENTRY_NAME:-${dev##*/}}}
+name="${dev_name}"
+count=0
+while [ -e "${mdir}/${dev_name}" ]; do name="${dev_name} $(( ++count ))"; done
+dir="${mdir}/${name}"
 
 case $TYPE in
     vfat)
-	mopts="$mopts,flush,gid=100,dmask=000,fmask=111"
-	;;
+        mopts="$mopts,flush,gid=100,dmask=000,fmask=111"
+        ;;
     ntfs)
-	mopts="$mopts,flush"
-	hash ntfs-3g && mtype="ntfs-3g"
-	;;
+        mopts="$mopts,flush"
+        hash ntfs-3g && mtype="ntfs-3g"
+        ;;
     *)
-	mopts="$mopts,sync"
-	;;
+        mopts="$mopts,sync"
+        ;;
 esac
 
 log "mounting device $dev in $dir"
@@ -86,6 +91,7 @@ mkdir -p "$dir"
 if mount -t "${mtype:-auto}" -o "$mopts" "$dev" "$dir"
 then
     # Notify
+    command -v notify-send && notify-send "Media Automount" "New device mounted at $dir"
     username="$(ps au | awk '$11 ~ /^xinit/ { print $1; exit }')"
     [[ "$username" ]] && DISPLAY=:0 runuser -u "$username" xdg-open "$dir"
     log "Device successfully mounted: $dir"
