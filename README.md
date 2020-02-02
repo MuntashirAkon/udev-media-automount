@@ -1,6 +1,15 @@
 udev-media-automount
 ====================
 
+**Maintainer's NOTE:** Original repository is really old but still relevant today. The purpose of this fork is to extend
+support for systems other than `systemd` (`runit` for instance) along with other modifications like notifications (using
+`notify-send`) and directory opening in your favourite file manager (either using `$FILE` environment variable or
+`xdg-open`). Since `logger` tool isn't widely used, messages will be directly written to `/var/log/media-automount.log`.
+Lastly, any inserted (or manually ran using `media-automount /dev/sd%D%P`) will mount the partition at `/media` followed
+by partition name (`LABEL` or `PARTLABEL`). If such label is not present, it will use `/media/sd%D%P` as the mount point.
+
+**By the original author**
+
 Auto mount removable media devices by means of udev rules.
 
 This is intended for simple systems that don't want or can't run the udisks2 daemon (which is designed for GNOME/KDE desktop environments and at the time of this writting is frustrating to set up from a bare commandline).
